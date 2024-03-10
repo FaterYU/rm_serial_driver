@@ -227,12 +227,9 @@ void RMSerialDriver::sendBuffData(
     packet.y = rune->position.y;
     packet.z = rune->position.z;
     packet.yaw = rune->theta;
-    packet.vx = rune->velocity.x;
-    packet.vy = rune->velocity.y;
-    packet.vz = rune->velocity.z;
-    packet.spd_a = 0.0;
-    packet.spd_b = rune->omega;
-    packet.spd_w = 0.0;
+    packet.vx = 0.0;
+    packet.vy = rune->omega;
+    packet.vz = 0.0;
     packet.cap_timestamp = time_info->time;
     packet.t_offset = rune->t_offset;
     crc16::Append_CRC16_Check_Sum(reinterpret_cast<uint8_t *>(&packet),

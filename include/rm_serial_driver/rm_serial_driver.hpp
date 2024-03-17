@@ -43,9 +43,7 @@ class RMSerialDriver : public rclcpp::Node {
 
   void sendArmorData(auto_aim_interfaces::msg::Target::SharedPtr msg);
 
-  void sendBuffData(
-      const buff_interfaces::msg::Rune::ConstSharedPtr& rune,
-      const buff_interfaces::msg::TimeInfo::ConstSharedPtr& time_info);
+  void sendBuffData(buff_interfaces::msg::Rune::SharedPtr rune);
 
   void reopenPort();
 
@@ -78,11 +76,12 @@ class RMSerialDriver : public rclcpp::Node {
   std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
 
   rclcpp::Subscription<auto_aim_interfaces::msg::Target>::SharedPtr target_sub_;
-  message_filters::Subscriber<buff_interfaces::msg::Rune> rune_sub_;
-  message_filters::Subscriber<buff_interfaces::msg::TimeInfo> time_info_sub_;
-  std::unique_ptr<message_filters::TimeSynchronizer<
-      buff_interfaces::msg::Rune, buff_interfaces::msg::TimeInfo>>
-      buff_sync_;
+  //   message_filters::Subscriber<buff_interfaces::msg::Rune> rune_sub_;
+  //   message_filters::Subscriber<buff_interfaces::msg::TimeInfo>
+  //   time_info_sub_; std::unique_ptr<message_filters::TimeSynchronizer<
+  //       buff_interfaces::msg::Rune, buff_interfaces::msg::TimeInfo>>
+  //       buff_sync_;
+  rclcpp::Subscription<buff_interfaces::msg::Rune>::SharedPtr rune_sub_;
 
   // For debug usage
   rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr latency_pub_;

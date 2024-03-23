@@ -77,18 +77,18 @@ RMSerialDriver::RMSerialDriver(const rclcpp::NodeOptions &options)
   target_sub_ = this->create_subscription<auto_aim_interfaces::msg::Target>(
       "/tracker/target", rclcpp::SensorDataQoS(),
       std::bind(&RMSerialDriver::sendArmorData, this, std::placeholders::_1));
-  rune_sub_ = this->create_subscription<buff_interfaces::msg::Rune>(
-      "/tracker/rune", rclcpp::SensorDataQoS(),
-      std::bind(&RMSerialDriver::sendBuffData, this, std::placeholders::_1));
+  // rune_sub_ = this->create_subscription<buff_interfaces::msg::Rune>(
+  //     "/tracker/rune", rclcpp::SensorDataQoS(),
+  //     std::bind(&RMSerialDriver::sendBuffData, this, std::placeholders::_1));
 
-  // rune_sub_.subscribe(this, "/tracker/rune");
-  // time_info_sub_.subscribe(this, "/time_info");
-  // buff_sync_ = std::make_unique<message_filters::TimeSynchronizer<
-  //     buff_interfaces::msg::Rune, buff_interfaces::msg::TimeInfo>>(
-  //     rune_sub_, time_info_sub_, 10);
-  // buff_sync_->registerCallback(std::bind(&RMSerialDriver::sendBuffData, this,
-  //                                        std::placeholders::_1,
-  //                                        std::placeholders::_2));
+  rune_sub_.subscribe(this, "/tracker/rune");
+  time_info_sub_.subscribe(this, "/time_info");
+  buff_sync_ = std::make_unique<message_filters::TimeSynchronizer<
+      buff_interfaces::msg::Rune, buff_interfaces::msg::TimeInfo>>(
+      rune_sub_, time_info_sub_, 10);
+  buff_sync_->registerCallback(std::bind(&RMSerialDriver::sendBuffData, this,
+                                         std::placeholders::_1,
+                                         std::placeholders::_2));
 }
 
 RMSerialDriver::~RMSerialDriver() {
@@ -218,7 +218,10 @@ void RMSerialDriver::sendArmorData(
   }
 }
 
-void RMSerialDriver::sendBuffData(buff_interfaces::msg::Rune::SharedPtr rune) {
+void RMSerialDriver::sendBuffData(
+    const buff_interfaces::msg::Rune::ConstSharedPtr &rune,
+    const buff_interfaces::msg::TimeInfo::ConstSharedPtr &time_info) {
+  RCLCPP_INFO(get_logger(), "Sending buff data");
   try {
     SendPacket packet;
     packet.state = rune->tracking ? 2 : 0;
@@ -235,7 +238,7 @@ void RMSerialDriver::sendBuffData(buff_interfaces::msg::Rune::SharedPtr rune) {
     packet.r1 = 0.0;
     packet.r2 = 0.0;
     packet.dz = 0.0;
-    packet.cap_timestamp = 0.0;
+    packet.cap_timestamp = time_info->time;
     packet.t_offset = 0.0;
     crc16::Append_CRC16_Check_Sum(reinterpret_cast<uint8_t *>(&packet),
                                   sizeof(packet));

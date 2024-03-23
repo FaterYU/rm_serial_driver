@@ -83,9 +83,8 @@ RMSerialDriver::RMSerialDriver(const rclcpp::NodeOptions &options)
 
   rune_sub_.subscribe(this, "/tracker/rune");
   time_info_sub_.subscribe(this, "/time_info");
-  buff_sync_ = std::make_unique<message_filters::TimeSynchronizer<
-      buff_interfaces::msg::Rune, buff_interfaces::msg::TimeInfo>>(
-      rune_sub_, time_info_sub_, 10);
+  buff_sync_ = std::make_unique<Sync>(
+      buff_syncpolicy(1000), rune_sub_, time_info_sub_);
   buff_sync_->registerCallback(std::bind(&RMSerialDriver::sendBuffData, this,
                                          std::placeholders::_1,
                                          std::placeholders::_2));
@@ -152,7 +151,7 @@ void RMSerialDriver::receiveData() {
 
           // publish time
           buff_interfaces::msg::TimeInfo time_info;
-          time_info.header.stamp = t.header.stamp;
+          time_info.header = t.header;
           time_info.time = packet.timestamp;
           time_info_pub_->publish(time_info);
 
@@ -179,7 +178,7 @@ void RMSerialDriver::receiveData() {
 }
 
 void RMSerialDriver::sendArmorData(
-    const auto_aim_interfaces::msg::Target::SharedPtr msg) {
+    auto_aim_interfaces::msg::Target::SharedPtr msg) {
   const static std::map<std::string, uint8_t> id_unit8_map{
       {"", 0},  {"outpost", 0}, {"1", 1}, {"1", 1},     {"2", 2},
       {"3", 3}, {"4", 4},       {"5", 5}, {"guard", 6}, {"base", 7}};
@@ -219,9 +218,8 @@ void RMSerialDriver::sendArmorData(
 }
 
 void RMSerialDriver::sendBuffData(
-    const buff_interfaces::msg::Rune::ConstSharedPtr &rune,
-    const buff_interfaces::msg::TimeInfo::ConstSharedPtr &time_info) {
-  RCLCPP_INFO(get_logger(), "Sending buff data");
+    buff_interfaces::msg::Rune::ConstSharedPtr rune,
+    buff_interfaces::msg::TimeInfo::ConstSharedPtr time_info) {
   try {
     SendPacket packet;
     packet.state = rune->tracking ? 2 : 0;

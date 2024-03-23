@@ -5,7 +5,8 @@
 #define RM_SERIAL_DRIVER__RM_SERIAL_DRIVER_HPP_
 
 #include <message_filters/subscriber.h>
-#include <message_filters/time_synchronizer.h>
+// #include <message_filters/time_synchronizer.h>
+#include <message_filters/sync_policies/approximate_time.h>
 #include <tf2_ros/transform_broadcaster.h>
 
 #include <geometry_msgs/msg/transform_stamped.hpp>
@@ -44,8 +45,8 @@ class RMSerialDriver : public rclcpp::Node {
   void sendArmorData(auto_aim_interfaces::msg::Target::SharedPtr msg);
 
   void sendBuffData(
-      const buff_interfaces::msg::Rune::ConstSharedPtr& msg,
-      const buff_interfaces::msg::TimeInfo::ConstSharedPtr& time_info);
+      buff_interfaces::msg::Rune::ConstSharedPtr msg,
+      buff_interfaces::msg::TimeInfo::ConstSharedPtr time_info);
 
   void reopenPort();
 
@@ -80,9 +81,16 @@ class RMSerialDriver : public rclcpp::Node {
   rclcpp::Subscription<auto_aim_interfaces::msg::Target>::SharedPtr target_sub_;
   message_filters::Subscriber<buff_interfaces::msg::Rune> rune_sub_;
   message_filters::Subscriber<buff_interfaces::msg::TimeInfo> time_info_sub_;
-  std::shared_ptr<message_filters::TimeSynchronizer<
-      buff_interfaces::msg::Rune, buff_interfaces::msg::TimeInfo>>
-      buff_sync_;
+
+  typedef message_filters::sync_policies::ApproximateTime<
+      buff_interfaces::msg::Rune, buff_interfaces::msg::TimeInfo>
+      buff_syncpolicy;  // 时间戳对齐规则
+  typedef message_filters::Synchronizer<buff_syncpolicy> Sync;
+  std::shared_ptr<Sync> buff_sync_;
+
+//   std::shared_ptr<message_filters::TimeSynchronizer<
+//       buff_interfaces::msg::Rune, buff_interfaces::msg::TimeInfo>>
+//       buff_sync_;
   // rclcpp::Subscription<buff_interfaces::msg::Rune>::SharedPtr
   // rune_sub_;
 

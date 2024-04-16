@@ -5,7 +5,6 @@
 #define RM_SERIAL_DRIVER__RM_SERIAL_DRIVER_HPP_
 
 #include <message_filters/subscriber.h>
-// #include <message_filters/time_synchronizer.h>
 #include <message_filters/sync_policies/approximate_time.h>
 #include <tf2_ros/transform_broadcaster.h>
 
@@ -27,30 +26,37 @@
 #include <vector>
 
 #include "auto_aim_interfaces/msg/target.hpp"
-#include "buff_interfaces/msg/rune.hpp"
-#include "buff_interfaces/msg/time_info.hpp"
+#include "auto_aim_interfaces/msg/time_info.hpp"
+// #include "buff_interfaces/msg/rune.hpp"
+// #include "buff_interfaces/msg/time_info.hpp"
 
-namespace rm_serial_driver {
-class RMSerialDriver : public rclcpp::Node {
- public:
-  explicit RMSerialDriver(const rclcpp::NodeOptions& options);
+namespace rm_serial_driver
+{
+class RMSerialDriver : public rclcpp::Node
+{
+public:
+  explicit RMSerialDriver(const rclcpp::NodeOptions & options);
 
   ~RMSerialDriver() override;
 
- private:
+private:
   void getParams();
 
   void receiveData();
 
-  void sendArmorData(auto_aim_interfaces::msg::Target::SharedPtr msg);
+  // void sendArmorData(const auto_aim_interfaces::msg::Target::ConstSharedPtr msg);
 
-  void sendBuffData(
-      buff_interfaces::msg::Rune::ConstSharedPtr msg,
-      buff_interfaces::msg::TimeInfo::ConstSharedPtr time_info);
+  void sendArmorData(
+    const auto_aim_interfaces::msg::Target::ConstSharedPtr msg,
+    const auto_aim_interfaces::msg::TimeInfo::ConstSharedPtr time_info);
+
+  // void sendBuffData(
+  //   buff_interfaces::msg::Rune::ConstSharedPtr msg,
+  //   buff_interfaces::msg::TimeInfo::ConstSharedPtr time_info);
 
   void reopenPort();
 
-  void setParam(const rclcpp::Parameter& param);
+  void setParam(const rclcpp::Parameter & param);
 
   void resetTracker();
 
@@ -61,8 +67,7 @@ class RMSerialDriver : public rclcpp::Node {
   std::unique_ptr<drivers::serial_driver::SerialDriver> serial_driver_;
 
   // Param client to set detect_colr
-  using ResultFuturePtr =
-      std::shared_future<std::vector<rcl_interfaces::msg::SetParametersResult>>;
+  using ResultFuturePtr = std::shared_future<std::vector<rcl_interfaces::msg::SetParametersResult>>;
   bool initial_set_param_ = false;
   uint8_t previous_receive_color_ = 0;
   rclcpp::AsyncParametersClient::SharedPtr detector_param_client_;
@@ -78,21 +83,25 @@ class RMSerialDriver : public rclcpp::Node {
   double timestamp_offset_ = 0;
   std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
 
-  rclcpp::Subscription<auto_aim_interfaces::msg::Target>::SharedPtr target_sub_;
-  message_filters::Subscriber<buff_interfaces::msg::Rune> rune_sub_;
-  message_filters::Subscriber<buff_interfaces::msg::TimeInfo> time_info_sub_;
+  // rclcpp::Subscription<auto_aim_interfaces::msg::Target>::SharedPtr aim_sub_;
+
+  message_filters::Subscriber<auto_aim_interfaces::msg::Target> aim_sub_;
+  message_filters::Subscriber<auto_aim_interfaces::msg::TimeInfo> aim_time_info_sub_;
 
   typedef message_filters::sync_policies::ApproximateTime<
-      buff_interfaces::msg::Rune, buff_interfaces::msg::TimeInfo>
-      buff_syncpolicy;  // 时间戳对齐规则
-  typedef message_filters::Synchronizer<buff_syncpolicy> Sync;
-  std::shared_ptr<Sync> buff_sync_;
+    auto_aim_interfaces::msg::Target, auto_aim_interfaces::msg::TimeInfo>
+    aim_syncpolicy;
+  typedef message_filters::Synchronizer<aim_syncpolicy> AimSync;
+  std::shared_ptr<AimSync> aim_sync_;
 
-//   std::shared_ptr<message_filters::TimeSynchronizer<
-//       buff_interfaces::msg::Rune, buff_interfaces::msg::TimeInfo>>
-//       buff_sync_;
-  // rclcpp::Subscription<buff_interfaces::msg::Rune>::SharedPtr
-  // rune_sub_;
+  // message_filters::Subscriber<buff_interfaces::msg::Rune> rune_sub_;
+  // message_filters::Subscriber<buff_interfaces::msg::TimeInfo> buff_time_info_sub_;
+
+  // typedef message_filters::sync_policies::ApproximateTime<
+  //   buff_interfaces::msg::Rune, buff_interfaces::msg::TimeInfo>
+  //   buff_syncpolicy;
+  // typedef message_filters::Synchronizer<buff_syncpolicy> BuffSync;
+  // std::shared_ptr<BuffSync> buff_sync_;
 
   // For debug usage
   rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr latency_pub_;
@@ -103,8 +112,9 @@ class RMSerialDriver : public rclcpp::Node {
   // Task message
   rclcpp::Publisher<std_msgs::msg::Int16>::SharedPtr task_pub_;
 
-  // Buff message
-  rclcpp::Publisher<buff_interfaces::msg::TimeInfo>::SharedPtr time_info_pub_;
+  // Time message
+  rclcpp::Publisher<auto_aim_interfaces::msg::TimeInfo>::SharedPtr aim_time_info_pub_;
+  // rclcpp::Publisher<buff_interfaces::msg::TimeInfo>::SharedPtr buff_time_info_pub_;
 };
 }  // namespace rm_serial_driver
 

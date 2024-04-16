@@ -21,11 +21,13 @@
 #include "rm_serial_driver/packet.hpp"
 #include "rm_serial_driver/rm_serial_driver.hpp"
 
-namespace rm_serial_driver {
-RMSerialDriver::RMSerialDriver(const rclcpp::NodeOptions &options)
-    : Node("rm_serial_driver", options),
-      owned_ctx_{new IoContext(2)},
-      serial_driver_{new drivers::serial_driver::SerialDriver(*owned_ctx_)} {
+namespace rm_serial_driver
+{
+RMSerialDriver::RMSerialDriver(const rclcpp::NodeOptions & options)
+: Node("rm_serial_driver", options),
+  owned_ctx_{new IoContext(2)},
+  serial_driver_{new drivers::serial_driver::SerialDriver(*owned_ctx_)}
+{
   RCLCPP_INFO(get_logger(), "Start RMSerialDriver!");
 
   getParams();
@@ -37,18 +39,17 @@ RMSerialDriver::RMSerialDriver(const rclcpp::NodeOptions &options)
   // Create Publisher
   task_pub_ = this->create_publisher<std_msgs::msg::Int16>("/task_mode", 10);
   latency_pub_ = this->create_publisher<std_msgs::msg::Float64>("/latency", 10);
-  marker_pub_ = this->create_publisher<visualization_msgs::msg::Marker>(
-      "/aiming_point", 10);
-  time_info_pub_ =
-      this->create_publisher<buff_interfaces::msg::TimeInfo>("/time_info", 10);
+  marker_pub_ = this->create_publisher<visualization_msgs::msg::Marker>("/aiming_point", 10);
+  aim_time_info_pub_ =
+    this->create_publisher<auto_aim_interfaces::msg::TimeInfo>("/time_info/aim", 10);
+  // buff_time_info_pub_ =
+  //   this->create_publisher<buff_interfaces::msg::TimeInfo>("/time_info/buff", 10);
 
   // Detect parameter client
-  detector_param_client_ =
-      std::make_shared<rclcpp::AsyncParametersClient>(this, "armor_detector");
+  detector_param_client_ = std::make_shared<rclcpp::AsyncParametersClient>(this, "armor_detector");
 
   // Tracker reset service client
-  reset_tracker_client_ =
-      this->create_client<std_srvs::srv::Trigger>("/tracker/reset");
+  reset_tracker_client_ = this->create_client<std_srvs::srv::Trigger>("/tracker/reset");
 
   try {
     serial_driver_->init_port(device_name_, *device_config_);
@@ -56,9 +57,9 @@ RMSerialDriver::RMSerialDriver(const rclcpp::NodeOptions &options)
       serial_driver_->port()->open();
       receive_thread_ = std::thread(&RMSerialDriver::receiveData, this);
     }
-  } catch (const std::exception &ex) {
-    RCLCPP_ERROR(get_logger(), "Error creating serial port: %s - %s",
-                 device_name_.c_str(), ex.what());
+  } catch (const std::exception & ex) {
+    RCLCPP_ERROR(
+      get_logger(), "Error creating serial port: %s - %s", device_name_.c_str(), ex.what());
     throw ex;
   }
 
@@ -74,23 +75,24 @@ RMSerialDriver::RMSerialDriver(const rclcpp::NodeOptions &options)
   aiming_point_.lifetime = rclcpp::Duration::from_seconds(0.1);
 
   // Create Subscription
-  target_sub_ = this->create_subscription<auto_aim_interfaces::msg::Target>(
-      "/tracker/target", rclcpp::SensorDataQoS(),
-      std::bind(&RMSerialDriver::sendArmorData, this, std::placeholders::_1));
-  // rune_sub_ = this->create_subscription<buff_interfaces::msg::Rune>(
-  //     "/tracker/rune", rclcpp::SensorDataQoS(),
-  //     std::bind(&RMSerialDriver::sendBuffData, this, std::placeholders::_1));
+  // aim_sub_ = this->create_subscription<auto_aim_interfaces::msg::Target>(
+  //   "/tracker/target", rclcpp::SensorDataQoS(),
+  //   std::bind(&RMSerialDriver::sendArmorData, this, std::placeholders::_1));
+  aim_sub_.subscribe(this, "/tracker/target", rclcpp::SensorDataQoS().get_rmw_qos_profile());
+  aim_time_info_sub_.subscribe(this, "/time_info/aim");
+  // rune_sub_.subscribe(this, "/tracker/rune");
+  // buff_time_info_sub_.subscribe(this, "/time_info/buff");
 
-  rune_sub_.subscribe(this, "/tracker/rune");
-  time_info_sub_.subscribe(this, "/time_info");
-  buff_sync_ = std::make_unique<Sync>(
-      buff_syncpolicy(1000), rune_sub_, time_info_sub_);
-  buff_sync_->registerCallback(std::bind(&RMSerialDriver::sendBuffData, this,
-                                         std::placeholders::_1,
-                                         std::placeholders::_2));
+  aim_sync_ = std::make_unique<AimSync>(aim_syncpolicy(500), aim_sub_, aim_time_info_sub_);
+  aim_sync_->registerCallback(
+    std::bind(&RMSerialDriver::sendArmorData, this, std::placeholders::_1, std::placeholders::_2));
+  // buff_sync_ = std::make_unique<BuffSync>(buff_syncpolicy(1000), rune_sub_, buff_time_info_sub_);
+  // buff_sync_->registerCallback(
+  //   std::bind(&RMSerialDriver::sendBuffData, this, std::placeholders::_1, std::placeholders::_2));
 }
 
-RMSerialDriver::~RMSerialDriver() {
+RMSerialDriver::~RMSerialDriver()
+{
   if (receive_thread_.joinable()) {
     receive_thread_.join();
   }
@@ -104,7 +106,8 @@ RMSerialDriver::~RMSerialDriver() {
   }
 }
 
-void RMSerialDriver::receiveData() {
+void RMSerialDriver::receiveData()
+{
   std::vector<uint8_t> header(1);
   std::vector<uint8_t> data;
   data.reserve(sizeof(ReceivePacket));
@@ -120,28 +123,25 @@ void RMSerialDriver::receiveData() {
         data.insert(data.begin(), header[0]);
         ReceivePacket packet = fromVector(data);
 
-        bool crc_ok = crc16::Verify_CRC16_Check_Sum(
-            reinterpret_cast<const uint8_t *>(&packet), sizeof(packet));
+        bool crc_ok =
+          crc16::Verify_CRC16_Check_Sum(reinterpret_cast<const uint8_t *>(&packet), sizeof(packet));
         if (crc_ok) {
-          // if (!initial_set_param_ ||
-          //     packet.detect_color != previous_receive_color_) {
-          //   setParam(rclcpp::Parameter("detect_color", packet.detect_color));
-          //   previous_receive_color_ = packet.detect_color;
-          // }
+          if (!initial_set_param_ || packet.detect_color != previous_receive_color_) {
+            setParam(rclcpp::Parameter("detect_color", packet.detect_color));
+            previous_receive_color_ = packet.detect_color;
+          }
 
-          // if (packet.reset_tracker) {
-          //   resetTracker();
-          // }
+          if (packet.reset_tracker) {
+            resetTracker();
+          }
 
           std_msgs::msg::Int16 task;
           task.data = packet.task_mode;
           task_pub_->publish(task);
 
           geometry_msgs::msg::TransformStamped t;
-          timestamp_offset_ =
-              this->get_parameter("timestamp_offset").as_double();
-          t.header.stamp =
-              this->now() + rclcpp::Duration::from_seconds(timestamp_offset_);
+          timestamp_offset_ = this->get_parameter("timestamp_offset").as_double();
+          t.header.stamp = this->now() - rclcpp::Duration::from_seconds(timestamp_offset_);
           t.header.frame_id = "odom";
           t.child_frame_id = "gimbal_link";
           tf2::Quaternion q;
@@ -150,10 +150,11 @@ void RMSerialDriver::receiveData() {
           tf_broadcaster_->sendTransform(t);
 
           // publish time
-          buff_interfaces::msg::TimeInfo time_info;
+          auto_aim_interfaces::msg::TimeInfo time_info;
           time_info.header = t.header;
           time_info.time = packet.timestamp;
-          time_info_pub_->publish(time_info);
+          aim_time_info_pub_->publish(time_info);
+          // buff_time_info_pub_->publish(time_info);
 
           if (abs(packet.aim_x) > 0.01) {
             aiming_point_.header.stamp = this->now();
@@ -166,22 +167,23 @@ void RMSerialDriver::receiveData() {
           RCLCPP_ERROR(get_logger(), "CRC error!");
         }
       } else {
-        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 20,
-                             "Invalid header: %02X", header[0]);
+        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 20, "Invalid header: %02X", header[0]);
       }
-    } catch (const std::exception &ex) {
-      RCLCPP_ERROR_THROTTLE(get_logger(), *get_clock(), 20,
-                            "Error while receiving data: %s", ex.what());
+    } catch (const std::exception & ex) {
+      RCLCPP_ERROR_THROTTLE(
+        get_logger(), *get_clock(), 20, "Error while receiving data: %s", ex.what());
       reopenPort();
     }
   }
 }
 
 void RMSerialDriver::sendArmorData(
-    auto_aim_interfaces::msg::Target::SharedPtr msg) {
+  const auto_aim_interfaces::msg::Target::ConstSharedPtr msg,
+  const auto_aim_interfaces::msg::TimeInfo::ConstSharedPtr time_info)
+{
   const static std::map<std::string, uint8_t> id_unit8_map{
-      {"", 0},  {"outpost", 0}, {"1", 1}, {"1", 1},     {"2", 2},
-      {"3", 3}, {"4", 4},       {"5", 5}, {"guard", 6}, {"base", 7}};
+    {"", 0},  {"outpost", 0}, {"1", 1}, {"1", 1},     {"2", 2},
+    {"3", 3}, {"4", 4},       {"5", 5}, {"guard", 6}, {"base", 7}};
 
   try {
     SendPacket packet;
@@ -199,8 +201,9 @@ void RMSerialDriver::sendArmorData(
     packet.r1 = msg->radius_1;
     packet.r2 = msg->radius_2;
     packet.dz = msg->dz;
-    crc16::Append_CRC16_Check_Sum(reinterpret_cast<uint8_t *>(&packet),
-                                  sizeof(packet));
+    // 20240329 ZY: Eliminate communication latency
+    packet.cap_timestamp = time_info->time;
+    crc16::Append_CRC16_Check_Sum(reinterpret_cast<uint8_t *>(&packet), sizeof(packet));
 
     std::vector<uint8_t> data = toVector(packet);
 
@@ -208,55 +211,54 @@ void RMSerialDriver::sendArmorData(
 
     std_msgs::msg::Float64 latency;
     latency.data = (this->now() - msg->header.stamp).seconds() * 1000.0;
-    RCLCPP_DEBUG_STREAM(
-        get_logger(), "Total latency: " + std::to_string(latency.data) + "ms");
+    RCLCPP_DEBUG_STREAM(get_logger(), "Total latency: " + std::to_string(latency.data) + "ms");
     latency_pub_->publish(latency);
-  } catch (const std::exception &ex) {
+  } catch (const std::exception & ex) {
     RCLCPP_ERROR(get_logger(), "Error while sending data: %s", ex.what());
     reopenPort();
   }
 }
 
-void RMSerialDriver::sendBuffData(
-    buff_interfaces::msg::Rune::ConstSharedPtr rune,
-    buff_interfaces::msg::TimeInfo::ConstSharedPtr time_info) {
-  try {
-    SendPacket packet;
-    packet.state = rune->tracking ? 2 : 0;
-    packet.id = rune->offset_id;
-    packet.armors_num = rune->offset_id;
-    packet.x = rune->position.x;
-    packet.y = rune->position.y;
-    packet.z = rune->position.z;
-    packet.yaw = rune->theta;
-    packet.vx = 0.0;
-    packet.vy = rune->omega;
-    packet.vz = 0.0;
-    packet.v_yaw = 0.0;
-    packet.r1 = 0.0;
-    packet.r2 = 0.0;
-    packet.dz = 0.0;
-    packet.cap_timestamp = time_info->time;
-    packet.t_offset = 0.0;
-    crc16::Append_CRC16_Check_Sum(reinterpret_cast<uint8_t *>(&packet),
-                                  sizeof(packet));
+// void RMSerialDriver::sendBuffData(
+//   buff_interfaces::msg::Rune::ConstSharedPtr rune,
+//   buff_interfaces::msg::TimeInfo::ConstSharedPtr time_info)
+// {
+//   try {
+//     SendPacket packet;
+//     packet.state = rune->tracking ? 2 : 0;
+//     packet.id = rune->offset_id;
+//     packet.armors_num = rune->offset_id;
+//     packet.x = rune->position.x;
+//     packet.y = rune->position.y;
+//     packet.z = rune->position.z;
+//     packet.yaw = rune->theta;
+//     packet.vx = rune->a;
+//     packet.vy = rune->b;
+//     packet.vz = rune->w;
+//     packet.v_yaw = 0.0;
+//     packet.r1 = 0.0;
+//     packet.r2 = 0.0;
+//     packet.dz = 0.0;
+//     packet.cap_timestamp = time_info->time;
+//     packet.t_offset = time_info->time - rune->t_offset;
+//     crc16::Append_CRC16_Check_Sum(reinterpret_cast<uint8_t *>(&packet), sizeof(packet));
 
-    std::vector<uint8_t> data = toVector(packet);
+//     std::vector<uint8_t> data = toVector(packet);
 
-    serial_driver_->port()->send(data);
+//     serial_driver_->port()->send(data);
 
-    std_msgs::msg::Float64 latency;
-    latency.data = (this->now() - rune->header.stamp).seconds() * 1000.0;
-    RCLCPP_DEBUG_STREAM(
-        get_logger(), "Total latency: " + std::to_string(latency.data) + "ms");
-    latency_pub_->publish(latency);
-  } catch (const std::exception &ex) {
-    RCLCPP_ERROR(get_logger(), "Error while sending data: %s", ex.what());
-    reopenPort();
-  }
-}
+//     std_msgs::msg::Float64 latency;
+//     latency.data = (this->now() - rune->header.stamp).seconds() * 1000.0;
+//     RCLCPP_DEBUG_STREAM(get_logger(), "Total latency: " + std::to_string(latency.data) + "ms");
+//     latency_pub_->publish(latency);
+//   } catch (const std::exception & ex) {
+//     RCLCPP_ERROR(get_logger(), "Error while sending data: %s", ex.what());
+//     reopenPort();
+//   }
+// }
 
-void RMSerialDriver::getParams() {
+void RMSerialDriver::getParams()
+{
   using FlowControl = drivers::serial_driver::FlowControl;
   using Parity = drivers::serial_driver::Parity;
   using StopBits = drivers::serial_driver::StopBits;
@@ -268,14 +270,14 @@ void RMSerialDriver::getParams() {
 
   try {
     device_name_ = declare_parameter<std::string>("device_name", "");
-  } catch (rclcpp::ParameterTypeException &ex) {
+  } catch (rclcpp::ParameterTypeException & ex) {
     RCLCPP_ERROR(get_logger(), "The device name provided was invalid");
     throw ex;
   }
 
   try {
     baud_rate = declare_parameter<int>("baud_rate", 0);
-  } catch (rclcpp::ParameterTypeException &ex) {
+  } catch (rclcpp::ParameterTypeException & ex) {
     RCLCPP_ERROR(get_logger(), "The baud_rate provided was invalid");
     throw ex;
   }
@@ -291,10 +293,10 @@ void RMSerialDriver::getParams() {
       fc = FlowControl::SOFTWARE;
     } else {
       throw std::invalid_argument{
-          "The flow_control parameter must be one of: none, software, or "
-          "hardware."};
+        "The flow_control parameter must be one of: none, software, or "
+        "hardware."};
     }
-  } catch (rclcpp::ParameterTypeException &ex) {
+  } catch (rclcpp::ParameterTypeException & ex) {
     RCLCPP_ERROR(get_logger(), "The flow_control provided was invalid");
     throw ex;
   }
@@ -309,10 +311,9 @@ void RMSerialDriver::getParams() {
     } else if (pt_string == "even") {
       pt = Parity::EVEN;
     } else {
-      throw std::invalid_argument{
-          "The parity parameter must be one of: none, odd, or even."};
+      throw std::invalid_argument{"The parity parameter must be one of: none, odd, or even."};
     }
-  } catch (rclcpp::ParameterTypeException &ex) {
+  } catch (rclcpp::ParameterTypeException & ex) {
     RCLCPP_ERROR(get_logger(), "The parity provided was invalid");
     throw ex;
   }
@@ -327,19 +328,19 @@ void RMSerialDriver::getParams() {
     } else if (sb_string == "2" || sb_string == "2.0") {
       sb = StopBits::TWO;
     } else {
-      throw std::invalid_argument{
-          "The stop_bits parameter must be one of: 1, 1.5, or 2."};
+      throw std::invalid_argument{"The stop_bits parameter must be one of: 1, 1.5, or 2."};
     }
-  } catch (rclcpp::ParameterTypeException &ex) {
+  } catch (rclcpp::ParameterTypeException & ex) {
     RCLCPP_ERROR(get_logger(), "The stop_bits provided was invalid");
     throw ex;
   }
 
-  device_config_ = std::make_unique<drivers::serial_driver::SerialPortConfig>(
-      baud_rate, fc, pt, sb);
+  device_config_ =
+    std::make_unique<drivers::serial_driver::SerialPortConfig>(baud_rate, fc, pt, sb);
 }
 
-void RMSerialDriver::reopenPort() {
+void RMSerialDriver::reopenPort()
+{
   RCLCPP_WARN(get_logger(), "Attempting to reopen port");
   try {
     if (serial_driver_->port()->is_open()) {
@@ -347,7 +348,7 @@ void RMSerialDriver::reopenPort() {
     }
     serial_driver_->port()->open();
     RCLCPP_INFO(get_logger(), "Successfully reopened port");
-  } catch (const std::exception &ex) {
+  } catch (const std::exception & ex) {
     RCLCPP_ERROR(get_logger(), "Error while reopening port: %s", ex.what());
     if (rclcpp::ok()) {
       rclcpp::sleep_for(std::chrono::seconds(1));
@@ -356,33 +357,33 @@ void RMSerialDriver::reopenPort() {
   }
 }
 
-void RMSerialDriver::setParam(const rclcpp::Parameter &param) {
+void RMSerialDriver::setParam(const rclcpp::Parameter & param)
+{
   if (!detector_param_client_->service_is_ready()) {
     RCLCPP_WARN(get_logger(), "Service not ready, skipping parameter set");
     return;
   }
 
-  if (!set_param_future_.valid() ||
-      set_param_future_.wait_for(std::chrono::seconds(0)) ==
-          std::future_status::ready) {
+  if (
+    !set_param_future_.valid() ||
+    set_param_future_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
     RCLCPP_INFO(get_logger(), "Setting detect_color to %ld...", param.as_int());
     set_param_future_ = detector_param_client_->set_parameters(
-        {param}, [this, param](const ResultFuturePtr &results) {
-          for (const auto &result : results.get()) {
-            if (!result.successful) {
-              RCLCPP_ERROR(get_logger(), "Failed to set parameter: %s",
-                           result.reason.c_str());
-              return;
-            }
+      {param}, [this, param](const ResultFuturePtr & results) {
+        for (const auto & result : results.get()) {
+          if (!result.successful) {
+            RCLCPP_ERROR(get_logger(), "Failed to set parameter: %s", result.reason.c_str());
+            return;
           }
-          RCLCPP_INFO(get_logger(), "Successfully set detect_color to %ld!",
-                      param.as_int());
-          initial_set_param_ = true;
-        });
+        }
+        RCLCPP_INFO(get_logger(), "Successfully set detect_color to %ld!", param.as_int());
+        initial_set_param_ = true;
+      });
   }
 }
 
-void RMSerialDriver::resetTracker() {
+void RMSerialDriver::resetTracker()
+{
   if (!reset_tracker_client_->service_is_ready()) {
     RCLCPP_WARN(get_logger(), "Service not ready, skipping tracker reset");
     return;

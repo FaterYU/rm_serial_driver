@@ -37,13 +37,14 @@ RMSerialDriver::RMSerialDriver(const rclcpp::NodeOptions & options)
   tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
 
   // Create Publisher
-  task_pub_ = this->create_publisher<std_msgs::msg::Int16>("/task_mode", 10);
+  task_pub_ = this->create_publisher<std_msgs::msg::String>("/task_mode", 10);
   latency_pub_ = this->create_publisher<std_msgs::msg::Float64>("/latency", 10);
   marker_pub_ = this->create_publisher<visualization_msgs::msg::Marker>("/aiming_point", 10);
   aim_time_info_pub_ =
     this->create_publisher<auto_aim_interfaces::msg::TimeInfo>("/time_info/aim", 10);
   // buff_time_info_pub_ =
   //   this->create_publisher<buff_interfaces::msg::TimeInfo>("/time_info/buff", 10);
+  record_controller_pub_ = this->create_publisher<std_msgs::msg::String>("/record_controller", 10);
 
   // Detect parameter client
   detector_param_client_ = std::make_shared<rclcpp::AsyncParametersClient>(this, "armor_detector");
@@ -135,9 +136,39 @@ void RMSerialDriver::receiveData()
             resetTracker();
           }
 
-          std_msgs::msg::Int16 task;
-          task.data = packet.task_mode;
+          std_msgs::msg::String task;
+          std::string theory_task;
+          if (
+            (packet.game_time >= 329 && packet.game_time <= 359) ||
+            (packet.game_time >= 239 && packet.game_time <= 269)) {
+            theory_task = "small_buff";
+          } else if (
+            (packet.game_time >= 149 && packet.game_time <= 179) ||
+            (packet.game_time >= 74 && packet.game_time <= 104) ||
+            (packet.game_time >= 0 && packet.game_time <= 29)) {
+            theory_task = "big_buff";
+          } else {
+            theory_task = "aim";
+          }
+
+          if (packet.task_mode == 0) {
+            task.data = theory_task;
+          } else if (packet.task_mode == 1) {
+            task.data = "aim";
+          } else if (packet.task_mode == 2) {
+            if (theory_task == "aim") {
+              task.data = "auto";
+            } else {
+              task.data = theory_task;
+            }
+          } else {
+            task.data = "aim";
+          }
           task_pub_->publish(task);
+
+          std_msgs::msg::String record_controller;
+          record_controller.data = packet.is_play ? "start" : "stop";
+          record_controller_pub_->publish(record_controller);
 
           geometry_msgs::msg::TransformStamped t;
           timestamp_offset_ = this->get_parameter("timestamp_offset").as_double();

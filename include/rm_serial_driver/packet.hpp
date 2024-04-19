@@ -16,7 +16,8 @@ struct ReceivePacket
   uint8_t detect_color : 1;  // 0-red 1-blue
   uint8_t task_mode : 2;     // 0-auto 1-aim 2-buff
   bool reset_tracker : 1;
-  uint8_t reserved : 4;
+  uint8_t is_play : 1;
+  uint8_t reserved : 3;
   float roll;
   float pitch;
   float yaw;

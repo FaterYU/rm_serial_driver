@@ -14,7 +14,7 @@
 #include <rclcpp/subscription.hpp>
 #include <serial_driver/serial_driver.hpp>
 #include <std_msgs/msg/float64.hpp>
-#include <std_msgs/msg/int16.hpp>
+#include <std_msgs/msg/string.hpp>
 #include <std_srvs/srv/trigger.hpp>
 #include <visualization_msgs/msg/marker.hpp>
 
@@ -110,11 +110,12 @@ private:
   std::thread receive_thread_;
 
   // Task message
-  rclcpp::Publisher<std_msgs::msg::Int16>::SharedPtr task_pub_;
+  rclcpp::Publisher<std_msgs::msg::String>::SharedPtr task_pub_;
 
   // Time message
   rclcpp::Publisher<auto_aim_interfaces::msg::TimeInfo>::SharedPtr aim_time_info_pub_;
   // rclcpp::Publisher<buff_interfaces::msg::TimeInfo>::SharedPtr buff_time_info_pub_;
+  rclcpp::Publisher<std_msgs::msg::String>::SharedPtr record_controller_pub_;
 };
 }  // namespace rm_serial_driver
 

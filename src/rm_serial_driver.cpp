@@ -42,8 +42,8 @@ RMSerialDriver::RMSerialDriver(const rclcpp::NodeOptions & options)
   marker_pub_ = this->create_publisher<visualization_msgs::msg::Marker>("/aiming_point", 10);
   aim_time_info_pub_ =
     this->create_publisher<auto_aim_interfaces::msg::TimeInfo>("/time_info/aim", 10);
-  // buff_time_info_pub_ =
-  //   this->create_publisher<buff_interfaces::msg::TimeInfo>("/time_info/buff", 10);
+  buff_time_info_pub_ =
+    this->create_publisher<buff_interfaces::msg::TimeInfo>("/time_info/buff", 10);
   record_controller_pub_ = this->create_publisher<std_msgs::msg::String>("/record_controller", 10);
 
   // Detect parameter client
@@ -81,15 +81,15 @@ RMSerialDriver::RMSerialDriver(const rclcpp::NodeOptions & options)
   //   std::bind(&RMSerialDriver::sendArmorData, this, std::placeholders::_1));
   aim_sub_.subscribe(this, "/tracker/target", rclcpp::SensorDataQoS().get_rmw_qos_profile());
   aim_time_info_sub_.subscribe(this, "/time_info/aim");
-  // rune_sub_.subscribe(this, "/tracker/rune");
-  // buff_time_info_sub_.subscribe(this, "/time_info/buff");
+  rune_sub_.subscribe(this, "/tracker/rune");
+  buff_time_info_sub_.subscribe(this, "/time_info/buff");
 
   aim_sync_ = std::make_unique<AimSync>(aim_syncpolicy(500), aim_sub_, aim_time_info_sub_);
   aim_sync_->registerCallback(
     std::bind(&RMSerialDriver::sendArmorData, this, std::placeholders::_1, std::placeholders::_2));
-  // buff_sync_ = std::make_unique<BuffSync>(buff_syncpolicy(1000), rune_sub_, buff_time_info_sub_);
-  // buff_sync_->registerCallback(
-  //   std::bind(&RMSerialDriver::sendBuffData, this, std::placeholders::_1, std::placeholders::_2));
+  buff_sync_ = std::make_unique<BuffSync>(buff_syncpolicy(1000), rune_sub_, buff_time_info_sub_);
+  buff_sync_->registerCallback(
+    std::bind(&RMSerialDriver::sendBuffData, this, std::placeholders::_1, std::placeholders::_2));
 }
 
 RMSerialDriver::~RMSerialDriver()
@@ -250,43 +250,43 @@ void RMSerialDriver::sendArmorData(
   }
 }
 
-// void RMSerialDriver::sendBuffData(
-//   buff_interfaces::msg::Rune::ConstSharedPtr rune,
-//   buff_interfaces::msg::TimeInfo::ConstSharedPtr time_info)
-// {
-//   try {
-//     SendPacket packet;
-//     packet.state = rune->tracking ? 2 : 0;
-//     packet.id = rune->offset_id;
-//     packet.armors_num = rune->offset_id;
-//     packet.x = rune->position.x;
-//     packet.y = rune->position.y;
-//     packet.z = rune->position.z;
-//     packet.yaw = rune->theta;
-//     packet.vx = rune->a;
-//     packet.vy = rune->b;
-//     packet.vz = rune->w;
-//     packet.v_yaw = 0.0;
-//     packet.r1 = 0.0;
-//     packet.r2 = 0.0;
-//     packet.dz = 0.0;
-//     packet.cap_timestamp = time_info->time;
-//     packet.t_offset = time_info->time - rune->t_offset;
-//     crc16::Append_CRC16_Check_Sum(reinterpret_cast<uint8_t *>(&packet), sizeof(packet));
+void RMSerialDriver::sendBuffData(
+  buff_interfaces::msg::Rune::ConstSharedPtr rune,
+  buff_interfaces::msg::TimeInfo::ConstSharedPtr time_info)
+{
+  try {
+    SendPacket packet;
+    packet.state = rune->tracking ? 2 : 0;
+    packet.id = rune->offset_id;
+    packet.armors_num = rune->offset_id;
+    packet.x = rune->position.x;
+    packet.y = rune->position.y;
+    packet.z = rune->position.z;
+    packet.yaw = rune->theta;
+    packet.vx = rune->a;
+    packet.vy = rune->b;
+    packet.vz = rune->w;
+    packet.v_yaw = 0.0;
+    packet.r1 = 0.0;
+    packet.r2 = 0.0;
+    packet.dz = 0.0;
+    packet.cap_timestamp = time_info->time;
+    packet.t_offset = (time_info->time + rune->t_offset) % 6283;
+    crc16::Append_CRC16_Check_Sum(reinterpret_cast<uint8_t *>(&packet), sizeof(packet));
 
-//     std::vector<uint8_t> data = toVector(packet);
+    std::vector<uint8_t> data = toVector(packet);
 
-//     serial_driver_->port()->send(data);
+    serial_driver_->port()->send(data);
 
-//     std_msgs::msg::Float64 latency;
-//     latency.data = (this->now() - rune->header.stamp).seconds() * 1000.0;
-//     RCLCPP_DEBUG_STREAM(get_logger(), "Total latency: " + std::to_string(latency.data) + "ms");
-//     latency_pub_->publish(latency);
-//   } catch (const std::exception & ex) {
-//     RCLCPP_ERROR(get_logger(), "Error while sending data: %s", ex.what());
-//     reopenPort();
-//   }
-// }
+    std_msgs::msg::Float64 latency;
+    latency.data = (this->now() - rune->header.stamp).seconds() * 1000.0;
+    RCLCPP_DEBUG_STREAM(get_logger(), "Total latency: " + std::to_string(latency.data) + "ms");
+    latency_pub_->publish(latency);
+  } catch (const std::exception & ex) {
+    RCLCPP_ERROR(get_logger(), "Error while sending data: %s", ex.what());
+    reopenPort();
+  }
+}
 
 void RMSerialDriver::getParams()
 {

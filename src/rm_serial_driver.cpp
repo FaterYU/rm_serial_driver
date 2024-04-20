@@ -146,7 +146,7 @@ void RMSerialDriver::receiveData()
             (packet.game_time >= 149 && packet.game_time <= 179) ||
             (packet.game_time >= 74 && packet.game_time <= 104) ||
             (packet.game_time >= 0 && packet.game_time <= 29)) {
-            theory_task = "big_buff";
+            theory_task = "large_buff";
           } else {
             theory_task = "aim";
           }

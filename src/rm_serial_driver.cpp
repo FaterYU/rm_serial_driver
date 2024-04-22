@@ -145,7 +145,7 @@ void RMSerialDriver::receiveData()
           } else if (
             (packet.game_time >= 149 && packet.game_time <= 179) ||
             (packet.game_time >= 74 && packet.game_time <= 104) ||
-            (packet.game_time >= 0 && packet.game_time <= 29)) {
+            (packet.game_time > 0 && packet.game_time <= 29)) {
             theory_task = "large_buff";
           } else {
             theory_task = "aim";
@@ -166,6 +166,10 @@ void RMSerialDriver::receiveData()
           }
           task_pub_->publish(task);
 
+          RCLCPP_DEBUG(
+            get_logger(), "Game time: %d, Task mode: %d, Theory task: %s", packet.game_time,
+            packet.task_mode, theory_task.c_str());
+
           std_msgs::msg::String record_controller;
           record_controller.data = packet.is_play ? "start" : "stop";
           record_controller_pub_->publish(record_controller);
@@ -181,11 +185,14 @@ void RMSerialDriver::receiveData()
           tf_broadcaster_->sendTransform(t);
 
           // publish time
-          auto_aim_interfaces::msg::TimeInfo time_info;
-          time_info.header = t.header;
-          time_info.time = packet.timestamp;
-          aim_time_info_pub_->publish(time_info);
-          // buff_time_info_pub_->publish(time_info);
+          auto_aim_interfaces::msg::TimeInfo aim_time_info;
+          buff_interfaces::msg::TimeInfo buff_time_info;
+          aim_time_info.header = t.header;
+          aim_time_info.time = packet.timestamp;
+          buff_time_info.header = t.header;
+          buff_time_info.time = packet.timestamp;
+          aim_time_info_pub_->publish(aim_time_info);
+          buff_time_info_pub_->publish(buff_time_info);
 
           if (abs(packet.aim_x) > 0.01) {
             aiming_point_.header.stamp = this->now();
@@ -271,7 +278,15 @@ void RMSerialDriver::sendBuffData(
     packet.r2 = 0.0;
     packet.dz = 0.0;
     packet.cap_timestamp = time_info->time;
-    packet.t_offset = (time_info->time + rune->t_offset) % 6283;
+    if (rune->w == 0) {
+      packet.t_offset = 0;
+    } else {
+      int T = 2 * 3.1415926 / rune->w * 1000;
+      int offset = (rune->t_offset - time_info->time % T) % T;
+      while (offset < 0) {
+        packet.t_offset = T + offset;
+      }
+    }
     crc16::Append_CRC16_Check_Sum(reinterpret_cast<uint8_t *>(&packet), sizeof(packet));
 
     std::vector<uint8_t> data = toVector(packet);

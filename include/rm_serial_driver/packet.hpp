@@ -17,7 +17,8 @@ struct ReceivePacket
   uint8_t task_mode : 2;     // 0-auto 1-aim 2-buff
   bool reset_tracker : 1;
   uint8_t is_play : 1;
-  uint8_t reserved : 3;
+  bool reset_lost : 1;
+  uint8_t reserved : 2;
   float roll;
   float pitch;
   float yaw;

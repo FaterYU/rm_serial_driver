@@ -51,8 +51,8 @@ private:
     const auto_aim_interfaces::msg::TimeInfo::ConstSharedPtr time_info);
 
   void sendBuffData(
-    buff_interfaces::msg::Rune::ConstSharedPtr msg,
-    buff_interfaces::msg::TimeInfo::ConstSharedPtr time_info);
+    const buff_interfaces::msg::Rune::ConstSharedPtr msg,
+    const buff_interfaces::msg::TimeInfo::ConstSharedPtr time_info);
 
   void reopenPort();
 

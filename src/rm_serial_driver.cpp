@@ -87,7 +87,7 @@ RMSerialDriver::RMSerialDriver(const rclcpp::NodeOptions & options)
   aim_sync_ = std::make_unique<AimSync>(aim_syncpolicy(500), aim_sub_, aim_time_info_sub_);
   aim_sync_->registerCallback(
     std::bind(&RMSerialDriver::sendArmorData, this, std::placeholders::_1, std::placeholders::_2));
-  buff_sync_ = std::make_unique<BuffSync>(buff_syncpolicy(1000), rune_sub_, buff_time_info_sub_);
+  buff_sync_ = std::make_unique<BuffSync>(buff_syncpolicy(1500), rune_sub_, buff_time_info_sub_);
   buff_sync_->registerCallback(
     std::bind(&RMSerialDriver::sendBuffData, this, std::placeholders::_1, std::placeholders::_2));
 }
@@ -258,8 +258,8 @@ void RMSerialDriver::sendArmorData(
 }
 
 void RMSerialDriver::sendBuffData(
-  buff_interfaces::msg::Rune::ConstSharedPtr rune,
-  buff_interfaces::msg::TimeInfo::ConstSharedPtr time_info)
+  const buff_interfaces::msg::Rune::ConstSharedPtr rune,
+  const buff_interfaces::msg::TimeInfo::ConstSharedPtr time_info)
 {
   try {
     SendPacket packet;
@@ -281,9 +281,9 @@ void RMSerialDriver::sendBuffData(
     if (rune->w == 0) {
       packet.t_offset = 0;
     } else {
-      int T = 2 * 3.1415926 / rune->w * 1000;
+      int T = abs(2 * 3.1415926 / rune->w * 1000);
       int offset = (rune->t_offset - time_info->time % T) % T;
-      while (offset < 0) {
+      if (offset < 0) {
         packet.t_offset = T + offset;
       }
     }

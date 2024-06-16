@@ -1,4 +1,5 @@
-// Copyright (c) 2022 ChenJun
+// Copyright (C) 2022 ChenJun
+// Copyright (C) 2024 Zheng Yu
 // Licensed under the Apache-2.0 License.
 
 #include "rm_serial_driver/crc.hpp"

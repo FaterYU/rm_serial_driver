@@ -1,4 +1,5 @@
-// Copyright (c) 2022 ChenJun
+// Copyright (C) 2022 ChenJun
+// Copyright (C) 2024 Zheng Yu
 // Licensed under the Apache-2.0 License.
 
 #ifndef RM_SERIAL_DRIVER__PACKET_HPP_
@@ -17,7 +18,7 @@ struct ReceivePacket
   uint8_t task_mode : 2;     // 0-auto 1-aim 2-buff
   bool reset_tracker : 1;
   uint8_t is_play : 1;
-  bool reset_lost : 1;
+  bool change_target : 1;
   uint8_t reserved : 2;
   float roll;
   float pitch;

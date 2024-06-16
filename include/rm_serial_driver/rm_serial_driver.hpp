@@ -1,4 +1,5 @@
-// Copyright (c) 2022 ChenJun
+// Copyright (C) 2022 ChenJun
+// Copyright (C) 2024 Zheng Yu
 // Licensed under the Apache-2.0 License.
 
 #ifndef RM_SERIAL_DRIVER__RM_SERIAL_DRIVER_HPP_
@@ -60,6 +61,8 @@ private:
 
   void resetTracker();
 
+  void changeTarget();
+
   // Serial port
   std::unique_ptr<IoContext> owned_ctx_;
   std::string device_name_;
@@ -75,6 +78,9 @@ private:
 
   // Service client to reset tracker
   rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr reset_tracker_client_;
+
+  // Service client to change target
+  rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr change_target_client_;
 
   // Aimimg point receiving from serial port for visualization
   visualization_msgs::msg::Marker aiming_point_;
@@ -115,6 +121,7 @@ private:
   // Time message
   rclcpp::Publisher<auto_aim_interfaces::msg::TimeInfo>::SharedPtr aim_time_info_pub_;
   rclcpp::Publisher<buff_interfaces::msg::TimeInfo>::SharedPtr buff_time_info_pub_;
+
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr record_controller_pub_;
 };
 }  // namespace rm_serial_driver

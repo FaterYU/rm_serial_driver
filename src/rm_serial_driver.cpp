@@ -1,4 +1,5 @@
-// Copyright (c) 2022 ChenJun
+// Copyright (C) 2022 ChenJun
+// Copyright (C) 2024 Zheng Yu
 // Licensed under the Apache-2.0 License.
 
 #include <tf2/LinearMath/Quaternion.h>
@@ -51,6 +52,9 @@ RMSerialDriver::RMSerialDriver(const rclcpp::NodeOptions & options)
 
   // Tracker reset service client
   reset_tracker_client_ = this->create_client<std_srvs::srv::Trigger>("/tracker/reset");
+
+  // Target change service cilent
+  change_target_client_ = this->create_client<std_srvs::srv::Trigger>("/tracker/change");
 
   try {
     serial_driver_->init_port(device_name_, *device_config_);
@@ -134,6 +138,10 @@ void RMSerialDriver::receiveData()
 
           if (packet.reset_tracker) {
             resetTracker();
+          }
+
+          if (packet.change_target) {
+            changeTarget();
           }
 
           std_msgs::msg::String task;
@@ -438,6 +446,18 @@ void RMSerialDriver::resetTracker()
   auto request = std::make_shared<std_srvs::srv::Trigger::Request>();
   reset_tracker_client_->async_send_request(request);
   RCLCPP_INFO(get_logger(), "Reset tracker!");
+}
+
+void RMSerialDriver::changeTarget()
+{
+  if (!change_target_client_->service_is_ready()) {
+    RCLCPP_WARN(get_logger(), "Service not ready, skipping target change");
+    return;
+  }
+
+  auto request = std::make_shared<std_srvs::srv::Trigger::Request>();
+  change_target_client_->async_send_request(request);
+  RCLCPP_INFO(get_logger(), "Change target!");
 }
 
 }  // namespace rm_serial_driver
